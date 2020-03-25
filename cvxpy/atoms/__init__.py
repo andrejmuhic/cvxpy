@@ -76,6 +76,7 @@ from cvxpy.atoms.elementwise.abs import abs
 from cvxpy.atoms.elementwise.ceil import ceil, floor
 from cvxpy.atoms.elementwise.entr import entr
 from cvxpy.atoms.elementwise.exp import exp
+from cvxpy.atoms.elementwise.elu import elu
 from cvxpy.atoms.elementwise.huber import huber
 from cvxpy.atoms.elementwise.inv_pos import inv_pos
 from cvxpy.atoms.elementwise.kl_div import kl_div
@@ -107,6 +108,7 @@ EXP_ATOMS = [
     log_det,
     entr,
     exp,
+    elu,
     kl_div,
     log,
     log1p,

@@ -20,6 +20,7 @@ from cvxpy.atoms.affine.binary_operators import MulExpression, multiply
 from cvxpy.atoms.affine.index import special_index
 from cvxpy.transforms.indicator import indicator
 from cvxpy.reductions.dcp2cone.atom_canonicalizers.exp_canon import *
+from cvxpy.reductions.dcp2cone.atom_canonicalizers.elu_canon import *
 from cvxpy.reductions.dcp2cone.atom_canonicalizers.entr_canon import *
 from cvxpy.reductions.dcp2cone.atom_canonicalizers.geo_mean_canon import *
 from cvxpy.reductions.dcp2cone.atom_canonicalizers.huber_canon import *
@@ -72,6 +73,7 @@ CANON_METHODS = {
     abs : abs_canon,
     entr : entr_canon,
     exp : exp_canon,
+    elu : elu_canon,
     huber : huber_canon,
     kl_div : kl_div_canon,
     log : log_canon,
