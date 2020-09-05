@@ -18,17 +18,18 @@ from cvxpy import problems
 from cvxpy.expressions import cvxtypes
 from cvxpy.reductions.reduction import Reduction
 from cvxpy.reductions import InverseData, Solution
-from cvxpy.constraints import Equality, Inequality, Zero, NonPos, PSD, SOC
+from cvxpy.constraints import (Equality, Inequality,
+                               Zero, NonNeg,
+                               PSD, SOC, NonPos)
 from cvxpy.reductions.complex2real.atom_canonicalizers import (
     CANON_METHODS as elim_cplx_methods)
-from cvxpy.reductions import utilities
-import cvxpy.lin_ops.lin_utils as lu
-import cvxpy.settings as s
+from cvxpy.lin_ops import lin_utils as lu
+from cvxpy import settings as s
 
 
 def accepts(problem):
     leaves = problem.variables() + problem.parameters() + problem.constants()
-    return any(l.is_complex() for l in leaves)
+    return any(leaf.is_complex() for leaf in leaves)
 
 
 class Complex2Real(Reduction):
@@ -53,10 +54,6 @@ class Complex2Real(Reduction):
 
         constrs = []
         for constraint in problem.constraints:
-            if type(constraint) == Equality:
-                constraint = utilities.lower_equality(constraint)
-            elif type(constraint) == Inequality:
-                constraint = utilities.lower_inequality(constraint)
             # real2imag maps variable id to a potential new variable
             # created for the imaginary part.
             real_constrs, imag_constrs = self.canonicalize_tree(
@@ -99,12 +96,15 @@ class Complex2Real(Reduction):
                         pvars[vid] = solution.primal_vars[vid]
             for cid, cons in inverse_data.id2cons.items():
                 if cons.is_real():
-                    dvars[vid] = solution.dual_vars[cid]
+                    dvars[cid] = solution.dual_vars[cid]
                 elif cons.is_imag():
                     imag_id = inverse_data.real2imag[cid]
                     dvars[cid] = 1j*solution.dual_vars[imag_id]
                 # For equality and inequality constraints.
-                elif isinstance(cons, (Equality, Zero, NonPos)) and cons.is_complex():
+                elif isinstance(cons,
+                                (Equality, Zero, Inequality,
+                                 NonNeg, NonPos)
+                                ) and cons.is_complex():
                     imag_id = inverse_data.real2imag[cid]
                     if imag_id in solution.dual_vars:
                         dvars[cid] = solution.dual_vars[cid] + \
@@ -121,6 +121,7 @@ class Complex2Real(Reduction):
                     dvars[cid] = dual[:n, :n] + 1j*dual[n:, :n]
                 else:
                     raise Exception("Unknown constraint type.")
+
         return Solution(solution.status, solution.opt_val, pvars, dvars,
                         solution.attr)
 

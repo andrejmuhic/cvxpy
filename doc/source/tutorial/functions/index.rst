@@ -102,6 +102,14 @@ and returns a scalar.
      - |concave| concave
      - |incr| incr.
 
+   * - :ref:`inv_prod(x) <inv-prod>`
+     - :math:`(x_1\cdots x_n)^{-1}`
+     - :math:`x \in \mathbf{R}^n_+`
+     - |positive| positive
+     - |convex| convex
+     - |decr| decr.
+
+
    * - :ref:`lambda_max(X) <lambda-max>`
      - :math:`\lambda_{\max}(X)`
      - :math:`X \in \mathbf{S}^n`
@@ -743,7 +751,7 @@ and returns a vector or matrix.
      - |affine| affine
      - depends |_| on C
 
-   * - :ref:`reshape(X, (n', m')) <reshape>`
+   * - :ref:`reshape(X, (m', n')) <reshape>`
 
      - :math:`X' \in\mathbf{R}^{m' \times n'}`
      - :math:`X \in\mathbf{R}^{m \times n}`

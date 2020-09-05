@@ -15,6 +15,7 @@ limitations under the License.
 """
 
 from cvxpy.atoms.atom import Atom
+from cvxpy.atoms.affine.binary_operators import multiply
 import numpy as np
 import scipy.sparse as sp
 
@@ -24,14 +25,14 @@ def diff_pos(x, y):
 
     This atom is log-log concave.
 
-    Parameters:
+    Parameters
     ----------
     x : :class:`~cvxpy.expressions.expression.Expression`
         An Expression.
     y : :class:`~cvxpy.expressions.expression.Expression`
         An Expression.
     """
-    return x * one_minus_pos(y/x)
+    return multiply(x, one_minus_pos(y/x))
 
 
 class one_minus_pos(Atom):
@@ -39,7 +40,7 @@ class one_minus_pos(Atom):
 
     This atom is log-log concave.
 
-    Parameters:
+    Parameters
     ----------
     x : :class:`~cvxpy.expressions.expression.Expression`
         An Expression.

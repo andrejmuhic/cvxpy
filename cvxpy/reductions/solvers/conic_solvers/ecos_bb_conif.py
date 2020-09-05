@@ -15,9 +15,10 @@ limitations under the License.
 """
 
 
-from .conic_solver import ConicSolver
 import cvxpy.interface as intf
 import cvxpy.settings as s
+from cvxpy.constraints import ExpCone
+from cvxpy.reductions.solvers.conic_solvers.conic_solver import ConicSolver
 from cvxpy.reductions.solvers.conic_solvers.ecos_conif import (
                                                     dims_to_solver_dict, ECOS)
 from cvxpy.reductions.solution import failure_solution, Solution
@@ -67,6 +68,13 @@ class ECOS_BB(ECOS):
         """
         status = self.STATUS_MAP[solution['info']['exitFlag']]
 
+        # Timing data
+        attr = {}
+        attr[s.SOLVE_TIME] = solution["info"]["timing"]["tsolve"]
+        attr[s.SETUP_TIME] = solution["info"]["timing"]["tsetup"]
+        attr[s.NUM_ITERS] = solution["info"]["iter"]
+        attr[s.EXTRA_STATS] = solution
+
         if status in s.SOLUTION_PRESENT:
             primal_val = solution['info']['pcost']
             opt_val = primal_val + inverse_data[s.OFFSET]
@@ -75,16 +83,24 @@ class ECOS_BB(ECOS):
             }
             dual_vars = None
             if not inverse_data['is_mip']:
-                eq_dual = utilities.get_dual_values(
-                    solution['y'],
-                    utilities.extract_dual_value,
-                    inverse_data[self.EQ_CONSTR])
-                leq_dual = utilities.get_dual_values(
+                dual_vars = utilities.get_dual_values(
                     solution['z'],
                     utilities.extract_dual_value,
-                    inverse_data[self.NEQ_CONSTR])
-                eq_dual.update(leq_dual)
-                dual_vars = eq_dual
+                    inverse_data[self.NEQ_CONSTR]
+                )
+                for con in inverse_data[self.NEQ_CONSTR]:
+                    if isinstance(con, ExpCone):
+                        cid = con.id
+                        n_cones = con.num_cones()
+                        perm = utilities.expcone_permutor(n_cones,
+                                                          ECOS.EXP_CONE_ORDER)
+                        dual_vars[cid] = dual_vars[cid][perm]
+                eq_duals = utilities.get_dual_values(
+                    solution['y'],
+                    utilities.extract_dual_value,
+                    inverse_data[self.EQ_CONSTR]
+                )
+                dual_vars.update(eq_duals)
             return Solution(status, opt_val, primal_vars, dual_vars, {})
         else:
             return failure_solution(status)

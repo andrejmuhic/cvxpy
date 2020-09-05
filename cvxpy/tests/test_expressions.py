@@ -274,22 +274,32 @@ class TestExpressions(BaseTest):
         p.value = A
         self.assertItemsAlmostEqual(p.value, A)
 
-        # Test invalid PSD parameter
-        with self.assertRaises(Exception) as cm:
-            p = Parameter((2, 2), PSD=True, value=[[1, 0], [0, -1]])
-        self.assertEqual(str(cm.exception), "Parameter value must be positive semidefinite.")
-
-        # Test invalid NSD parameter
-        with self.assertRaises(Exception) as cm:
-            p = Parameter((2, 2), NSD=True, value=[[1, 0], [0, -1]])
-        self.assertEqual(str(cm.exception), "Parameter value must be negative semidefinite.")
-
         # Test arithmetic.
         p = Parameter(shape=(2, 2), PSD=True)
         self.assertTrue((2*p).is_psd())
         self.assertTrue((p + p).is_psd())
         self.assertTrue((-p).is_nsd())
         self.assertTrue(((-2)*(-p)).is_psd())
+
+        # Test invalid PSD and NSD parameters
+        n = 5
+        P = Parameter(shape=(n, n), PSD=True)
+        N = Parameter(shape=(n, n), NSD=True)
+        np.random.randn(0)
+        U = np.random.randn(n, n)
+        U = U @ U.T
+        (evals, U) = np.linalg.eigh(U)  # U is now an orthogonal matrix
+        v1 = np.array([3, 2, 1, 1e-8, -1])
+        v2 = np.array([3, 2, 2, 1e-6, -1])
+        v3 = np.array([3, 2, 2, 1e-4, -1e-6])
+        vs = [v1, v2, v3]
+        for vi in vs:
+            with self.assertRaises(Exception) as cm:
+                P.value = U @ np.diag(vi) @ U.T
+            self.assertEqual(str(cm.exception), "Parameter value must be positive semidefinite.")
+            with self.assertRaises(Exception) as cm:
+                N.value = -U @ np.diag(vi) @ U.T
+            self.assertEqual(str(cm.exception), "Parameter value must be negative semidefinite.")
 
     # Test the Parameter class on bad inputs.
     def test_parameters_failures(self):
@@ -1094,3 +1104,67 @@ class TestExpressions(BaseTest):
 
         expr = cp.pnorm(3 * self.y ** 2, 1)
         self.assertEqual(expr.is_pwl(), False)
+
+    def test_broadcast_mul(self):
+        """Test multiply broadcasting.
+        """
+        y = Parameter((3, 1))
+        z = Variable((1, 3))
+        y.value = np.arange(3)[:, None]
+        z.value = (np.arange(3) - 1)[None, :]
+        expr = cp.multiply(y, z)
+        self.assertItemsAlmostEqual(expr.value, y.value * z.value)
+
+        prob = cp.Problem(cp.Minimize(cp.sum(expr)), [z == z.value])
+        prob.solve()
+        self.assertItemsAlmostEqual(expr.value, y.value * z.value)
+
+        np.random.seed(0)
+        m, n = 3, 4
+        A = np.random.rand(m, n)
+
+        col_scale = Variable(n)
+
+        with self.assertRaises(ValueError) as cm:
+            cp.multiply(A, col_scale)
+        self.assertEqual(str(cm.exception), "Cannot broadcast dimensions  (3, 4) (4,)")
+
+        col_scale = Variable([1, n])
+        C = cp.multiply(A, col_scale)
+        self.assertEqual(C.shape, (m, n))
+
+        row_scale = Variable([m, 1])
+        R = cp.multiply(A, row_scale)
+        self.assertEqual(R.shape, (m, n))
+
+    def test_broadcast_add(self):
+        """Test addition broadcasting.
+        """
+        y = Parameter((3, 1))
+        z = Variable((1, 3))
+        y.value = np.arange(3)[:, None]
+        z.value = (np.arange(3) - 1)[None, :]
+        expr = y + z
+        self.assertItemsAlmostEqual(expr.value, y.value + z.value)
+
+        prob = cp.Problem(cp.Minimize(cp.sum(expr)), [z == z.value])
+        prob.solve()
+        self.assertItemsAlmostEqual(expr.value, y.value + z.value)
+
+        np.random.seed(0)
+        m, n = 3, 4
+        A = np.random.rand(m, n)
+
+        col_scale = Variable(n)
+
+        with self.assertRaises(ValueError) as cm:
+            A + col_scale
+        self.assertEqual(str(cm.exception), "Cannot broadcast dimensions  (3, 4) (4,)")
+
+        col_scale = Variable([1, n])
+        C = A + col_scale
+        self.assertEqual(C.shape, (m, n))
+
+        row_scale = Variable([m, 1])
+        R = A + row_scale
+        self.assertEqual(R.shape, (m, n))

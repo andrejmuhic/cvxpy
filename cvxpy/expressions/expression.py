@@ -20,6 +20,7 @@ import warnings
 from cvxpy import error
 from cvxpy.constraints import Equality, Inequality, PSD
 from cvxpy.expressions import cvxtypes
+from cvxpy.utilities import scopes
 import cvxpy.utilities.performance_utils as perf
 import cvxpy.utilities as u
 import cvxpy.utilities.key_utils as ku
@@ -169,12 +170,6 @@ class Expression(u.Canonical):
         return 0 in self.shape or all(
             arg.is_constant() for arg in self.args)
 
-    @abc.abstractmethod
-    def is_dpp(self):
-        """The expression is a disciplined parameterized expression.
-        """
-        return NotImplemented
-
     @perf.compute_once
     def is_affine(self):
         """Is the expression affine?
@@ -194,14 +189,23 @@ class Expression(u.Canonical):
         return NotImplemented
 
     @perf.compute_once
-    def is_dcp(self):
+    def is_dcp(self, dpp=False):
         """Checks whether the Expression is DCP.
+
+        Parameters
+        ----------
+        dpp : bool, optional
+            If True, enforce the disciplined parametrized programming (DPP)
+            ruleset; only relevant when the problem involves Parameters.
 
         Returns
         -------
         bool
             True if the Expression is DCP, False otherwise.
         """
+        if dpp:
+            with scopes.dpp_scope():
+                return self.is_convex() or self.is_concave()
         return self.is_convex() or self.is_concave()
 
     def is_log_log_constant(self):
@@ -234,7 +238,7 @@ class Expression(u.Canonical):
         """
         return NotImplemented
 
-    def is_dgp(self):
+    def is_dgp(self, dpp=False):
         """Checks whether the Expression is log-log DCP.
 
         Returns
@@ -242,7 +246,16 @@ class Expression(u.Canonical):
         bool
             True if the Expression is log-log DCP, False otherwise.
         """
+        if dpp:
+            with scopes.dpp_scope():
+                return self.is_log_log_convex() or self.is_log_log_concave()
         return self.is_log_log_convex() or self.is_log_log_concave()
+
+    @abc.abstractmethod
+    def is_dpp(self, context='dcp'):
+        """The expression is a disciplined parameterized expression.
+        """
+        return NotImplemented
 
     def is_quasiconvex(self):
         return self.is_convex()
@@ -444,7 +457,40 @@ class Expression(u.Canonical):
     def cast_to_const(expr):
         """Converts a non-Expression to a Constant.
         """
+        if isinstance(expr, list):
+            for elem in expr:
+                if isinstance(elem, Expression):
+                    raise ValueError(
+                        "The input must be a single CVXPY Expression, not a list. "
+                        "Combine Expressions using atoms such as bmat, hstack, and vstack."
+                    )
         return expr if isinstance(expr, Expression) else cvxtypes.constant()(expr)
+
+    @staticmethod
+    def broadcast(lh_expr, rh_expr):
+        """Broacast the binary operator.
+        """
+        lh_expr = Expression.cast_to_const(lh_expr)
+        rh_expr = Expression.cast_to_const(rh_expr)
+        if lh_expr.is_scalar() and not rh_expr.is_scalar():
+            lh_expr = cvxtypes.promote()(lh_expr, rh_expr.shape)
+        elif rh_expr.is_scalar() and not lh_expr.is_scalar():
+            rh_expr = cvxtypes.promote()(rh_expr, lh_expr.shape)
+        # Broadcasting.
+        if lh_expr.ndim == 2 and rh_expr.ndim == 2:
+            # Replicate dimensions of size 1.
+            dims = [max(lh_expr.shape[i], rh_expr.shape[i]) for i in range(2)]
+            # Broadcast along dim 0.
+            if lh_expr.shape[0] == 1 and lh_expr.shape[0] < dims[0]:
+                lh_expr = np.ones((dims[0], 1)) @ lh_expr
+            if rh_expr.shape[0] == 1 and rh_expr.shape[0] < dims[0]:
+                rh_expr = np.ones((dims[0], 1)) @ rh_expr
+            # Broadcast along dim 1.
+            if lh_expr.shape[1] == 1 and lh_expr.shape[1] < dims[1]:
+                lh_expr = lh_expr @ np.ones((1, dims[1]))
+            if rh_expr.shape[1] == 1 and rh_expr.shape[1] < dims[1]:
+                rh_expr = rh_expr @ np.ones((1, dims[1]))
+        return lh_expr, rh_expr
 
     @_cast_other
     def __add__(self, other):
@@ -452,6 +498,7 @@ class Expression(u.Canonical):
         """
         if isinstance(other, cvxtypes.constant()) and other.is_zero():
             return self
+        self, other = self.broadcast(self, other)
         return cvxtypes.add_expr()([self, other])
 
     @_cast_other
@@ -500,7 +547,7 @@ class Expression(u.Canonical):
             # Because we want to discourage using ``*`` to call matmul, we
             # raise a warning to the user.
             warnings.resetwarnings()
-            warnings.warn(__STAR_MATMUL_WARNING__, DeprecationWarning)
+            warnings.warn(__STAR_MATMUL_WARNING__, UserWarning)
             warnings.resetwarnings()
             return cvxtypes.matmul_expr()(self, other)
 
